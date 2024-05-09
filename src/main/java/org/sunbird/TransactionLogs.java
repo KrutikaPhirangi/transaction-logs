@@ -4,6 +4,7 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSo
 
 import org.janusgraph.core.*;
 
+import org.janusgraph.core.log.ChangeProcessor;
 import org.janusgraph.core.log.ChangeState;
 import org.janusgraph.core.log.LogProcessorFramework;
 import org.janusgraph.core.log.TransactionId;
@@ -16,37 +17,38 @@ import static org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalS
 
 public class TransactionLogs {
     public static void listenLogsEvent() throws Exception {
-        GraphTraversalSource g = traversal().withRemote("/Users/sanketika-mac1/Documents/GitHub/transaction-logs/src/main/conf/remote-graph.properties");
-        JanusGraph graph = JanusGraphFactory.open("/Users/sanketika-mac1/Documents/GitHub/transaction-logs/src/main/conf/janusgraph-inmemory.properties");
 
+        JanusGraph graph = JanusGraphFactory.open("conf/janusgraph-inmemory.properties");
         LogProcessorFramework logProcessor = JanusGraphFactory.openTransactionLog(graph);
-        logProcessor.addLogProcessor("TestLog")
-                .setProcessorIdentifier("NCF")
-                .setStartTime(Instant.now())
-                .addProcessor((JanusGraphTransaction janusGraphTransaction, TransactionId transactionId, ChangeState changeState) -> {
-                    System.out.println("tx--" + janusGraphTransaction);
-                    System.out.println("txId--" + transactionId);
-                    System.out.println("changeState--" + changeState);
-                })
-                .build();
 
-        System.out.println("adding the data");
+        logProcessor.addLogProcessor("TestLog").
+                setProcessorIdentifier("NCF").
+                setStartTime(Instant.now()).
+                addProcessor(new ChangeProcessor() {
+                    @Override
+                    public void process(JanusGraphTransaction tx, TransactionId txId, ChangeState changeState) {
+                        System.out.println("tx " + tx.tx());
+                        System.out.println("txId " + txId.getInstanceId());
+                        System.out.println("changeState " + changeState);
+                    }
+                }).
+                build();
+        JanusGraphTransaction tx = graph.buildTransaction().logIdentifier("TestLog").start();
         try {
-            g.addV().property("type", "Content011");
-            graph.tx().commit();
-            System.out.println("Vertex committed ");
-            System.out.println("Transaction committed successfully");
+            for (int i = 0; i <= 10; i++) {
+                System.out.println("going to add =" + i);
+                JanusGraphVertex a = tx.addVertex("NCF_099");
+                a.property("type", "HOLD");
+                a.property("serialNo", "XS31B4");
+                tx.commit();
+                System.out.println("Vertex committed =" + a);
+            }
         } catch (Exception e) {
-            System.out.println("Error committing transaction: " + e.getMessage());
             e.printStackTrace();
-            graph.tx().rollback();
+            tx.rollback();
         } finally {
-            graph.close();
+            tx.close();
         }
-        System.out.println("---LIST-----");
-        System.out.println(g.V().valueMap().toList());
-        g.V().hasLabel("NCF").valueMap().toList().forEach(System.out::println);
-
     }
 
     public static void main(String[] args) throws Exception {
